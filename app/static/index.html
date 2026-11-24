@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earnings Call Q&amp;A</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<section id="login-view" class="login hidden">
+  <div class="login-card">
+    <h1>Earnings Call Q&amp;A</h1>
+    <p class="muted">Multi-user document search. Pick a demo user to sign in. Each user can only search the companies they are entitled to.</p>
+    <div id="user-cards" class="user-cards"></div>
+    <form id="login-form" class="login-form">
+      <input id="email-input" type="email" placeholder="or type an email, e.g. alice@email.com" autocomplete="off">
+      <button type="submit">Sign in</button>
+    </form>
+    <p id="login-error" class="error"></p>
+    <p class="tip">Tip: open a second browser tab and sign in as another user. Each tab keeps its own session, so you can show two users side by side.</p>
+  </div>
+</section>
+
+<!-- ============ APP ============ -->
+<section id="app-view" class="app hidden">
+  <aside class="sidebar">
+    <div class="who">
+      <div class="avatar" id="avatar"></div>
+      <div>
+        <div id="who-name" class="who-name"></div>
+        <div id="who-email" class="muted small"></div>
+      </div>
+    </div>
+    <h3>Your document access</h3>
+    <div id="library"></div>
+    <button id="new-chat" class="secondary">+ New conversation</button>
+    <button id="logout" class="link">Sign out</button>
+  </aside>
+
+  <main class="chat">
+    <div id="messages" class="messages"></div>
+    <div id="suggestions" class="suggestions"></div>
+    <form id="chat-form" class="composer">
+      <input id="question" placeholder="Ask about revenue, margins, guidance... follow-up questions keep context" autocomplete="off">
+      <button type="submit" id="send">Ask</button>
+    </form>
+  </main>
+</section>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+fastapi>=0.110
+uvicorn>=0.29
+pypdf>=4.0
+httpx>=0.27          # used by the tests and scripts/concurrency_demo.py
+pytest>=8.0
+reportlab>=4.0       # only needed to regenerate the sample PDFs
+anthropic>=2.0       # optional: only used when ANTHROPIC_API_KEY is set (Claude answer mode)

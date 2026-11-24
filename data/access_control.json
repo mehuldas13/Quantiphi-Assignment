@@ -1,0 +1,38 @@
+{
+  "_comment": "Who can see what. Companies own documents; users are granted companies. Edit this file to add users, companies or PDFs, then restart the server.",
+  "companies": {
+    "zentrix_cloud": {
+      "name": "Zentrix Cloud",
+      "aliases": ["zentrix", "zentrix cloud", "zentrix cloud inc"],
+      "documents": ["zentrix_cloud_q4_fy2025.pdf"]
+    },
+    "voltara_motors": {
+      "name": "Voltara Motors",
+      "aliases": ["voltara", "voltara motors", "aria"],
+      "documents": ["voltara_motors_q4_fy2025.pdf", "voltara_motors_q3_fy2025.pdf"]
+    },
+    "medivane_therapeutics": {
+      "name": "Medivane Therapeutics",
+      "aliases": ["medivane", "medivane therapeutics", "cardiolex", "neurovane"],
+      "documents": ["medivane_therapeutics_q4_fy2025.pdf"]
+    },
+    "solvane_energy": {
+      "name": "Solvane Energy",
+      "aliases": ["solvane", "solvane energy"],
+      "documents": ["solvane_energy_q4_fy2025.pdf"]
+    },
+    "brightmart_retail": {
+      "name": "Brightmart Retail",
+      "aliases": ["brightmart", "brightmart retail", "brightmart plus"],
+      "documents": ["brightmart_retail_q4_fy2025.pdf"]
+    }
+  },
+  "users": {
+    "alice@email.com":   {"name": "Alice",   "companies": ["zentrix_cloud"]},
+    "bob@email.com":     {"name": "Bob",     "companies": ["voltara_motors", "medivane_therapeutics"]},
+    "charlie@email.com": {"name": "Charlie", "companies": ["solvane_energy", "brightmart_retail"]},
+    "userA@email.com":   {"name": "User A",  "companies": ["zentrix_cloud"]},
+    "userB@email.com":   {"name": "User B",  "companies": ["voltara_motors"]},
+    "userC@email.com":   {"name": "User C",  "companies": ["zentrix_cloud", "voltara_motors"]}
+  }
+}
