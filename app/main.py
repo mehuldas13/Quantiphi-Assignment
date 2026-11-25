@@ -1,6 +1,6 @@
 """FastAPI app: JSON API + the single-page web UI.
 
-Run:  uvicorn app.main:app --reload     then open http://localhost:8000
+Run:  python -m uvicorn app.main:app --reload     then open http://127.0.0.1:8000
 
 FastAPI runs the plain `def` endpoints below in a thread pool, so many users
 can query at the same time. Shared state is either read-only after start-up

@@ -2,7 +2,7 @@
 
 A Python web app where several users search a shared set of earnings-call PDFs, and each user only gets answers from the companies they are allowed to see. Follow-up questions keep the context of the conversation ("And the gross margin?" → "How did that compare to Q3?").
 
-It runs on a laptop with **no API key, no database and no model download**. One command starts it, and the browser UI is at `http://localhost:8000`.
+It runs on a laptop with **no API key, no database and no model download**. One command starts it, and the browser UI is at `http://127.0.0.1:8000`.
 
 | | |
 |---|---|
@@ -29,7 +29,7 @@ It runs on a laptop with **no API key, no database and no model download**. One 
 9. [Using your own PDFs](#9-using-your-own-pdfs)
 10. [Limitations and next steps](#10-limitations-and-next-steps)
 
-More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (design and security model) and [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) (a step-by-step script for the live demo or video).
+More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (design and security model) and [docs/REVIEWER_WALKTHROUGH.md](docs/REVIEWER_WALKTHROUGH.md) (step-by-step checks with example questions and expected answers).
 
 ---
 
@@ -49,7 +49,7 @@ git clone <your-repo-url> doc-qa && cd doc-qa
 run.bat
 ```
 
-Then open **http://127.0.0.1:8000** (or http://localhost:8000) in your browser.
+Then open **http://127.0.0.1:8000** in your browser.
 
 > Run the command from inside the project folder (the one with `app/` and `run.sh`), and keep that terminal open while you use the app. Don't open `index.html` directly from disk; the page needs the running server. If the terminal shows `http://0.0.0.0:8000`, use `127.0.0.1` in the browser instead.
 
@@ -73,7 +73,7 @@ pip install -r requirements.txt
 python -m uvicorn app.main:app --reload   # http://127.0.0.1:8000
 ```
 
-The interactive API docs (Swagger) are at **http://localhost:8000/docs**.
+The interactive API docs (Swagger) are at **http://127.0.0.1:8000/docs**.
 
 ### Optional: Claude-written answers
 
@@ -145,11 +145,11 @@ All of this lives in one file, [`data/access_control.json`](data/access_control.
 | Query and retrieve relevant excerpts | `app/retriever.py` (BM25 search) and `app/answer.py` | Ask "What was the revenue reported in Q4?" and open "Sources" |
 | Conversational: follow-ups keep context | `app/contextualizer.py` rewrites follow-ups using the user's conversation, stored in `app/memory.py` | "And the gross margin?" then "How did that compare to last year?" |
 | Isolation: users never see other users' documents | Access filter applied **before** search (`app/retriever.py`), re-checked after (`app/service.py`), on downloads (`app/main.py`), and conversations keyed by user (`app/memory.py`) | Ask about a company you don't own; `tests/test_access_control.py` |
-| Basic UI: log in with email | Login screen, `app/static/` | Open http://localhost:8000 |
+| Basic UI: log in with email | Login screen, `app/static/` | Open http://127.0.0.1:8000 |
 | Basic UI: submit queries, view answers | Chat panel with sources | Ask anything |
 | Basic UI: context-aware follow-ups | "How this answer was built" panel shows the rewritten query | Expand it under a follow-up answer |
 | Simultaneous users that don't interfere | FastAPI thread pool; read-only index; locks on sessions, conversations and the audit log | Two browser tabs, `scripts/concurrency_demo.py`, `tests/test_concurrency.py` |
-| Simulated authentication | Random bearer token per login (`app/auth.py`) | `/api/login` in http://localhost:8000/docs |
+| Simulated authentication | Random bearer token per login (`app/auth.py`) | `/api/login` in http://127.0.0.1:8000/docs |
 | Python, sample PDFs, README setup guide | This repository | You're reading it |
 
 **The example scenario from the assignment** works as written:
@@ -221,7 +221,7 @@ doc-qa/
 │   ├── generate_sample_pdfs.py  Rebuild the sample PDFs
 │   └── transcripts.py           Text of the sample transcripts
 ├── tests/                 pytest suite (isolation, conversation, concurrency)
-├── docs/                  Architecture, demo script, screenshots
+├── docs/                  Architecture, reviewer walkthrough, screenshots
 ├── logs/audit.jsonl       Created at runtime: one line per question
 ├── requirements.txt
 └── run.sh / run.bat

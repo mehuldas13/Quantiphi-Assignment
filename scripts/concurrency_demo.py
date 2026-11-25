@@ -2,7 +2,7 @@
 and show that every user only ever gets answers from their own companies.
 
 Start the server first (uvicorn app.main:app), then:
-    python scripts/concurrency_demo.py            # default http://localhost:8000
+    python scripts/concurrency_demo.py            # default http://127.0.0.1:8000
     python scripts/concurrency_demo.py http://host:port
 """
 import sys
@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
-BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000"
+BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000"
 USERS = ["alice@email.com", "bob@email.com", "charlie@email.com", "userA@email.com", "userB@email.com", "userC@email.com"]
 QUESTIONS = ["What was the revenue reported in Q4?", "And the gross margin?", "What was Zentrix Cloud's revenue?"]
 
