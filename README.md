@@ -77,6 +77,8 @@ The interactive API docs (Swagger) are at **http://127.0.0.1:8000/docs**.
 
 ### Trying the API in Swagger (/docs)
 
+Screenshots of each step are in the [reviewer walkthrough](docs/REVIEWER_WALKTHROUGH.md#7-testing-the-api-in-swagger-docs).
+
 1. Open **http://127.0.0.1:8000/docs**.
 2. Expand `POST /api/login` → **Try it out** → body `{"email": "alice@email.com"}` → **Execute**. Copy the `token` and `conversation_id` from the response.
 3. Click the **Authorize** button (padlock, top right), paste **only the token** (without the word `Bearer`), click **Authorize**, then **Close**.

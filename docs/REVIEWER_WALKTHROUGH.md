@@ -18,7 +18,7 @@ Keep the terminal open and go to **http://127.0.0.1:8000**. If it doesn't start,
 Open the app in **two browser tabs**. Each tab has its own session, so you can sign in as two users at the same time.
 
 Optional extras:
-* Swagger API docs: http://127.0.0.1:8000/docs (log in with `POST /api/login`, then paste the token into the **Authorize** button; see the [README](../README.md#trying-the-api-in-swagger-docs))
+* Swagger API docs: http://127.0.0.1:8000/docs (log in with `POST /api/login`, then paste the token into the **Authorize** button; see [section 7](#7-testing-the-api-in-swagger-docs) below)
 * Audit log: `logs/audit.jsonl` (created after the first question)
 
 ## 1. The setup
@@ -94,7 +94,55 @@ python scripts/concurrency_demo.py      # needs the app running
 * The tests run every user against 15 questions, including ones that name other companies, and check that nothing from another company comes back.
 * The concurrency test runs 18 sessions in parallel and checks that every conversation contains only its own turns.
 
-## 7. Optional: Claude-written answers
+## 7. Testing the API in Swagger (/docs)
+
+Every feature of the UI is also available as a JSON API. Swagger lets you call it from the browser. The app must be running.
+
+**Step 1: open the docs page.** Go to **http://127.0.0.1:8000/docs**. Endpoints with a padlock need a login token. The **Authorize** button is at the top right.
+
+![Swagger overview](screenshots/swagger_01_overview.png)
+
+**Step 2: log in.** Expand `POST /api/login`, click **Try it out**, enter the body below and click **Execute**.
+
+```json
+{ "email": "alice@email.com" }
+```
+
+The response contains a `token` and a `conversation_id`. Copy both.
+
+![Login request and response](screenshots/swagger_02_login.png)
+
+**Step 3: authorize.** Click **Authorize** at the top of the page. Paste **only the token**, without the word `Bearer`, then click **Authorize**.
+
+![Paste the token](screenshots/swagger_03_authorize.png)
+
+The dialog now shows **Authorized**. Click **Close**. Swagger will send the token with every padlocked request.
+
+![Authorized](screenshots/swagger_04_authorized.png)
+
+**Step 4: ask a question.** Expand `POST /api/chat`, click **Try it out**, enter your question and the `conversation_id` from step 2, then click **Execute**.
+
+```json
+{
+  "question": "What was the revenue reported in Q4?",
+  "conversation_id": "<conversation_id from step 2>"
+}
+```
+
+![Chat request](screenshots/swagger_05_chat_request.png)
+
+**Step 5: read the response.** You get code **200** with the `answer`, the `sources` (company, document, page, excerpt) and a `trace` showing the rewritten query and which companies were searched or blocked. Notice the `Authorization: Bearer …` header in the generated curl command.
+
+![Chat response](screenshots/swagger_06_chat_response.png)
+
+**Follow-ups and isolation through the API:**
+* Send `"question": "And the gross margin?"` with the same `conversation_id` to see context carried over (`trace.is_followup` is `true`).
+* Send `"question": "What was Voltara Motors' revenue?"` as Alice: the answer starts with *Access denied* and `sources` is empty.
+* To switch user, click **Authorize → Logout**, log in again with another email (step 2) and authorize with the new token.
+
+If you get **401 Not logged in**, the token is missing or expired: repeat steps 2 and 3.
+
+## 8. Optional: Claude-written answers
 
 Stop the app, set `ANTHROPIC_API_KEY`, and start it again. Answers are then written by Claude from the same access-filtered excerpts. "How this answer was built" shows `Answer mode: claude`.
 
