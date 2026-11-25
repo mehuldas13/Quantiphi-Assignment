@@ -1,33 +1,18 @@
-"""Answer generation from retrieved excerpts.
-
-Two interchangeable answerers:
-
-* ExtractiveAnswerer (default, no API key): picks the sentences from the
-  retrieved chunks that best match the query and quotes them with citations.
-  Fully offline and deterministic.
-* ClaudeAnswerer (optional): sends ONLY the retrieved, access-filtered excerpts
-  plus the user's own conversation history to Claude, which writes a fluent
-  answer with [n] citations. The model never sees the full corpus, so it
-  cannot leak a document the user is not allowed to read.
-"""
+"""Builds an answer by picking the sentences from the retrieved chunks that best
+match the query, each labelled with its company and source number."""
 from __future__ import annotations
 
-import logging
 import re
 
 from .ingest import split_sentences
 from .retriever import Hit
 from .text import query_terms, tokenize
 
-log = logging.getLogger(__name__)
-
 NOT_FOUND = ("I couldn't find anything about that in the documents you have access to. "
              "Try rephrasing, or ask about one of the companies listed on the left.")
 
 
 class ExtractiveAnswerer:
-    name = "extractive"
-
     def __init__(self, idf: dict[str, float], company_names: dict[str, str] | None = None):
         self.idf = idf
         self.company_names = company_names or {}
@@ -72,54 +57,3 @@ class ExtractiveAnswerer:
                 company = self.company_names.get(chunk.company_id, chunk.company_id)
                 picked.append(f"- **{company}:** {s} [{n}]")
         return "Here is what the documents you can access say:\n\n" + "\n".join(picked)
-
-
-SYSTEM_PROMPT = """You answer questions about company earnings-call transcripts for one user.
-You are given numbered excerpts that this user is authorised to read. Use only those excerpts.
-Cite the excerpts you rely on with their number in square brackets, like [1].
-If the excerpts do not contain the answer, say you could not find it in the documents the user has access to; do not use outside knowledge.
-Use the conversation history to understand follow-up questions such as "how did that compare to Q3?".
-Keep answers short: two to five sentences, with the key figures stated exactly as they appear in the excerpts."""
-
-
-class ClaudeAnswerer:
-    name = "claude"
-
-    def __init__(self, model: str, fallback: ExtractiveAnswerer):
-        import anthropic  # imported lazily so the extractive mode needs no extra package
-
-        self._anthropic = anthropic
-        self.client = anthropic.Anthropic()
-        self.model = model
-        self.fallback = fallback
-
-    def answer(self, question: str, standalone: str, hits: list[Hit], history=None) -> str:
-        if not hits:
-            return NOT_FOUND
-        excerpts = "\n\n".join(
-            f"[{n}] {h.chunk.title}, page {h.chunk.page}:\n{h.chunk.text}" for n, h in enumerate(hits, start=1))
-        messages = []
-        for turn in (history or [])[-4:]:
-            messages.append({"role": "user", "content": turn.question})
-            messages.append({"role": "assistant", "content": turn.answer})
-        messages.append({"role": "user", "content": f"Excerpts:\n\n{excerpts}\n\nQuestion: {question}"})
-        try:
-            response = self.client.beta.messages.create(
-                model=self.model,
-                max_tokens=4000,
-                system=SYSTEM_PROMPT,
-                output_config={"effort": "low"},
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-                messages=messages,
-            )
-        except self._anthropic.APIConnectionError as e:
-            log.warning("Claude unreachable, using extractive answer: %s", e)
-            return self.fallback.answer(question, standalone, hits, history)
-        except self._anthropic.APIStatusError as e:
-            log.warning("Claude API error %s, using extractive answer", e.status_code)
-            return self.fallback.answer(question, standalone, hits, history)
-        if response.stop_reason == "refusal":
-            return self.fallback.answer(question, standalone, hits, history)
-        text = "".join(b.text for b in response.content if b.type == "text").strip()
-        return text or self.fallback.answer(question, standalone, hits, history)

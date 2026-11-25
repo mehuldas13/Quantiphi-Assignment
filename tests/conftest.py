@@ -8,7 +8,6 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("DOCQA_LOG_DIR", tempfile.mkdtemp())
-os.environ["DOCQA_ANSWER_MODE"] = "extractive"  # tests must be deterministic and offline
 
 
 @pytest.fixture(scope="session")

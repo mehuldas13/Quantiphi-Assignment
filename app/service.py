@@ -4,21 +4,20 @@
   2. Contextualise         - rewrite a follow-up into a standalone query using this user's history
   3. Authorisation check   - if the question names companies the user may not read, refuse those
   4. Retrieve              - BM25 search restricted to the allowed (and focused) companies
-  5. Answer                - extractive or Claude, from the retrieved excerpts only
+  5. Answer                - built from the retrieved excerpts only
   6. Remember + audit      - store the turn in the user's conversation, write an audit log line
 """
 from __future__ import annotations
 
 import json
 import logging
-import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config
 from .access import AccessPolicy, User
-from .answer import ClaudeAnswerer, ExtractiveAnswerer
+from .answer import ExtractiveAnswerer
 from .contextualizer import resolve
 from .ingest import load_corpus
 from .memory import ConversationStore, Turn
@@ -28,7 +27,7 @@ log = logging.getLogger(__name__)
 
 
 class QAService:
-    def __init__(self, policy: AccessPolicy, retriever: BM25Retriever, answer_mode: str = "auto",
+    def __init__(self, policy: AccessPolicy, retriever: BM25Retriever,
                  audit_path: Path | None = None, top_k: int = 4, max_turns: int = 10):
         self.policy = policy
         self.retriever = retriever
@@ -36,17 +35,14 @@ class QAService:
         self.top_k = top_k
         self.audit_path = audit_path
         self._audit_lock = threading.Lock()
-        extractive = ExtractiveAnswerer(retriever.idf, {c.id: c.name for c in policy.companies.values()})
-        use_claude = answer_mode == "claude" or (answer_mode == "auto" and os.getenv("ANTHROPIC_API_KEY"))
-        self.answerer = ClaudeAnswerer(config.CLAUDE_MODEL, extractive) if use_claude else extractive
-        log.info("Answer mode: %s", self.answerer.name)
+        self.answerer = ExtractiveAnswerer(retriever.idf, {c.id: c.name for c in policy.companies.values()})
 
     @classmethod
     def from_config(cls) -> "QAService":
         policy = AccessPolicy.load(config.ACCESS_FILE)
         chunks = load_corpus(config.PDF_DIR, policy, config.CHUNK_WORDS, config.OVERLAP_SENTENCES)
         log.info("Indexed %d chunks from %d documents", len(chunks), len({c.document for c in chunks}))
-        return cls(policy, BM25Retriever(chunks), config.ANSWER_MODE, config.LOG_DIR / "audit.jsonl",
+        return cls(policy, BM25Retriever(chunks), config.LOG_DIR / "audit.jsonl",
                    config.TOP_K, config.MAX_HISTORY_TURNS)
 
     # ------------------------------------------------------------------
@@ -92,7 +88,6 @@ class QAService:
                           "topic": r.topic, "period": r.period},
                 "searched_companies": [self.policy.company_name(c) for c in search_scope_list],
                 "denied_companies": [self.policy.company_name(c) for c in denied],
-                "answer_mode": self.answerer.name,
             },
         }
         self._audit(user, result)

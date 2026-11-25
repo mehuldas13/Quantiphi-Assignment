@@ -149,7 +149,6 @@ function addBot(r) {
         ${t.is_followup !== undefined ? `<dt>Follow-up?</dt><dd>${t.is_followup ? "yes, context carried from the previous turn" : "no, new question"}</dd>` : ""}
         ${t.searched_companies ? `<dt>Searched</dt><dd>${pills(t.searched_companies, "ok")}</dd>` : ""}
         ${t.denied_companies && t.denied_companies.length ? `<dt>Blocked</dt><dd>${pills(t.denied_companies, "deny")}</dd>` : ""}
-        ${t.answer_mode ? `<dt>Answer mode</dt><dd>${esc(t.answer_mode)}</dd>` : ""}
       </dl>
     </details>`;
   const sourcesHtml = (r.sources || []).length ? `

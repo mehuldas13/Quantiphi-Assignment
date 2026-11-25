@@ -63,7 +63,7 @@ def index():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "chunks": len(service.retriever.chunks), "answer_mode": service.answerer.name}
+    return {"status": "ok", "chunks": len(service.retriever.chunks)}
 
 
 @app.get("/api/demo-users")
