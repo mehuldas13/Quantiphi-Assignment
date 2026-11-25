@@ -1,8 +1,8 @@
-# Reviewer walkthrough (about 10 minutes)
+# Reviewer walkthrough
 
-Follow these steps to check the system against the assignment. Each step lists what to do and what you should see. The four points the assignment asks to see are marked:
+Steps to check the app against the assignment, with the expected results.
 
-① logging in as different users · ② submitting queries and getting answers · ③ query isolation · ④ conversational follow-ups
+① login as different users · ② queries and answers · ③ query isolation · ④ follow-up questions
 
 ## 0. Start the app
 
@@ -13,17 +13,11 @@ cd Quantiphi-Assignment
 run.bat           # Windows
 ```
 
-Keep the terminal open and go to **http://127.0.0.1:8000**. If it doesn't start, see the troubleshooting table in the [README](../README.md#troubleshooting).
-
-Open the app in **two browser tabs**. Each tab has its own session, so you can sign in as two users at the same time.
-
-Optional extras:
-* Swagger API docs: http://127.0.0.1:8000/docs (log in with `POST /api/login`, then paste the token into the **Authorize** button; see [section 7](#7-testing-the-api-in-swagger-docs) below)
-* Audit log: `logs/audit.jsonl` (created after the first question)
+Open **http://127.0.0.1:8000** in two browser tabs. Each tab has its own session, so you can sign in as two users at once.
 
 ## 1. The setup
 
-The login screen lists six demo users and the companies each one can access. They match the assignment:
+The login screen lists the demo users and their access:
 
 | User | Can access |
 |---|---|
@@ -32,7 +26,7 @@ The login screen lists six demo users and the companies each one can access. The
 | Charlie | Solvane Energy (D), Brightmart Retail (E) |
 | User A / B / C | Zentrix Cloud / Voltara Motors / both |
 
-All access rules live in one file: `data/access_control.json`.
+Access rules are in `data/access_control.json`.
 
 ## 2. Alice: login, query, follow-ups ① ② ④
 
@@ -51,8 +45,6 @@ All access rules live in one file: `data/access_control.json`.
 | What was Voltara Motors' revenue? | Red **Access denied: you are not authorised to view documents for Voltara Motors. Your access covers: Zentrix Cloud.** No sources |
 | Compare Zentrix and Voltara revenue | Zentrix part answered; Voltara listed under **Blocked** in "How this answer was built" |
 
-The search engine only scores chunks from the user's allowed companies, so restricted content can't be retrieved, ranked or quoted.
-
 ## 4. Bob at the same time: follow-ups on Company B ① ④
 
 **Tab 2:** sign in as **Bob** while Alice stays signed in on tab 1.
@@ -60,11 +52,11 @@ The search engine only scores chunks from the user's allowed companies, so restr
 | Ask | Expected answer | What to check |
 |---|---|---|
 | What was Voltara's revenue in Q4? | 4.12 billion dollars, up 29% | |
-| How did the automotive gross margin compare to Q3? | 17.8% in Q4 vs 15.1% in Q3 | Company carried over; uses both the Q4 and the Q3 transcript |
+| How did the automotive gross margin compare to Q3? | 17.8% in Q4 vs 15.1% in Q3 | Company carried over |
 | What drove the improvement? | Battery cost reductions, Aria reaching scale, lower logistics costs | "The improvement" resolved from context |
 | What about Medivane? | Answer from Medivane Therapeutics | Company switched, topic kept, still within Bob's access |
 
-Back in **tab 1**, ask Alice **"What are the biggest risks?"**. Her answer still comes from her own conversation and companies; Bob's questions had no effect on it.
+Back in tab 1, ask Alice **"What are the biggest risks?"**. The answer comes from Zentrix Cloud only.
 
 ## 5. Charlie: the example scenario from the assignment ③
 
@@ -76,11 +68,11 @@ Sign out in tab 2 and sign in as **Charlie**.
 | What was Zentrix Cloud's revenue in Q4? | Access denied (Company A) |
 | What did Voltara say about deliveries? | Access denied (Company B) |
 
-Only Charlie's own PDFs appear in the left panel, and the download endpoint returns 403 for any other company's file.
+Only Charlie's own PDFs appear in the left panel.
 
 ## 6. Automated checks
 
-In a second terminal, from the project folder:
+In a second terminal:
 
 ```bash
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
@@ -91,36 +83,31 @@ python scripts/concurrency_demo.py      # needs the app running
 # 6 users x 3 questions in parallel, ... leaks: 0
 ```
 
-* The tests run every user against 15 questions, including ones that name other companies, and check that nothing from another company comes back.
-* The concurrency test runs 18 sessions in parallel and checks that every conversation contains only its own turns.
+## 7. API in Swagger
 
-## 7. Testing the API in Swagger (/docs)
-
-Every feature of the UI is also available as a JSON API. Swagger lets you call it from the browser. The app must be running.
-
-**Step 1: open the docs page.** Go to **http://127.0.0.1:8000/docs**. Endpoints with a padlock need a login token. The **Authorize** button is at the top right.
+**Step 1.** Open **http://127.0.0.1:8000/docs**. Endpoints with a padlock need a token.
 
 ![Swagger overview](screenshots/swagger_01_overview.png)
 
-**Step 2: log in.** Expand `POST /api/login`, click **Try it out**, enter the body below and click **Execute**.
+**Step 2.** Expand `POST /api/login`, click **Try it out**, enter the body below and click **Execute**.
 
 ```json
 { "email": "alice@email.com" }
 ```
 
-The response contains a `token` and a `conversation_id`. Copy both.
+Copy the `token` and `conversation_id` from the response.
 
 ![Login request and response](screenshots/swagger_02_login.png)
 
-**Step 3: authorize.** Click **Authorize** at the top of the page. Paste **only the token**, without the word `Bearer`, then click **Authorize**.
+**Step 3.** Click **Authorize**, paste the token (without `Bearer`) and click **Authorize**.
 
 ![Paste the token](screenshots/swagger_03_authorize.png)
 
-The dialog now shows **Authorized**. Click **Close**. Swagger will send the token with every padlocked request.
+Then click **Close**.
 
 ![Authorized](screenshots/swagger_04_authorized.png)
 
-**Step 4: ask a question.** Expand `POST /api/chat`, click **Try it out**, enter your question and the `conversation_id` from step 2, then click **Execute**.
+**Step 4.** Expand `POST /api/chat`, click **Try it out**, enter the body below and click **Execute**.
 
 ```json
 {
@@ -131,13 +118,8 @@ The dialog now shows **Authorized**. Click **Close**. Swagger will send the toke
 
 ![Chat request](screenshots/swagger_05_chat_request.png)
 
-**Step 5: read the response.** You get code **200** with the `answer`, the `sources` (company, document, page, excerpt) and a `trace` showing the rewritten query and which companies were searched or blocked. Notice the `Authorization: Bearer …` header in the generated curl command.
+**Step 5.** The response (200) contains the `answer`, its `sources` and a `trace` with the rewritten query.
 
 ![Chat response](screenshots/swagger_06_chat_response.png)
 
-**Follow-ups and isolation through the API:**
-* Send `"question": "And the gross margin?"` with the same `conversation_id` to see context carried over (`trace.is_followup` is `true`).
-* Send `"question": "What was Voltara Motors' revenue?"` as Alice: the answer starts with *Access denied* and `sources` is empty.
-* To switch user, click **Authorize → Logout**, log in again with another email (step 2) and authorize with the new token.
-
-If you get **401 Not logged in**, the token is missing or expired: repeat steps 2 and 3.
+To switch user, click **Authorize → Logout** and repeat steps 2 and 3 with another email. A **401** means the token is missing or expired.
