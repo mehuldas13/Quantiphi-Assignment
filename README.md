@@ -49,7 +49,20 @@ git clone <your-repo-url> doc-qa && cd doc-qa
 run.bat
 ```
 
-Then open **http://localhost:8000**.
+Then open **http://127.0.0.1:8000** (or http://localhost:8000) in your browser.
+
+> Run the command from inside the project folder (the one with `app/` and `run.sh`), and keep that terminal open while you use the app. Don't open `index.html` directly from disk; the page needs the running server. If the terminal shows `http://0.0.0.0:8000`, use `127.0.0.1` in the browser instead.
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `ModuleNotFoundError: No module named 'app'` | You're not in the project folder. `cd` into it (where `app/` is) and run again |
+| `TypeError: unsupported operand type(s) for \|` or other syntax errors | Python is older than 3.10. Install 3.10+ and recreate `.venv` |
+| `address already in use` / port 8000 busy | Another program uses the port: `PORT=8001 ./run.sh` (or `uvicorn app.main:app --port 8001`) and open :8001 |
+| Browser says "can't reach this page" | The server isn't running or stopped with an error: check the terminal output |
+| `uvicorn: command not found` | Activate the virtualenv first (`source .venv/bin/activate`, Windows `.venv\Scripts\activate`) or use `python -m uvicorn app.main:app` |
+| Page opens but is blank or login fails | Hard refresh (Ctrl+Shift+R); check the terminal for errors |
 
 `run.sh` / `run.bat` create a virtual environment, install `requirements.txt`, and start the server. To do it by hand:
 
@@ -57,7 +70,7 @@ Then open **http://localhost:8000**.
 python3 -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload        # http://localhost:8000
+python -m uvicorn app.main:app --reload   # http://127.0.0.1:8000
 ```
 
 The interactive API docs (Swagger) are at **http://localhost:8000/docs**.
