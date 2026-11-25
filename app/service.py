@@ -1,11 +1,11 @@
-"""The Q&A pipeline. One call to ask() runs these steps:
+"""The Q&A pipeline. Each call to ask() runs these steps:
 
-  1. Resolve permissions   - allowed companies for this user, from the policy
-  2. Contextualise         - rewrite a follow-up into a standalone query using this user's history
-  3. Authorisation check   - if the question names companies the user may not read, refuse those
-  4. Retrieve              - BM25 search restricted to the allowed (and focused) companies
-  5. Answer                - built from the retrieved excerpts only
-  6. Remember + audit      - store the turn in the user's conversation, write an audit log line
+  1. Look up the companies the user can access.
+  2. Rewrite a follow-up into a full query using the user's history.
+  3. Refuse any company the question names that the user can't access.
+  4. Search only the allowed companies.
+  5. Build the answer from the retrieved excerpts.
+  6. Save the turn and write an audit log line.
 """
 from __future__ import annotations
 
@@ -18,107 +18,159 @@ from pathlib import Path
 from . import config
 from .access import AccessPolicy, User
 from .answer import ExtractiveAnswerer
-from .contextualizer import resolve
+from .contextualizer import Resolved, resolve
 from .ingest import load_corpus
 from .memory import ConversationStore, Turn
-from .retriever import BM25Retriever
+from .retriever import BM25Retriever, Hit
 
 log = logging.getLogger(__name__)
 
 
 class QAService:
-    def __init__(self, policy: AccessPolicy, retriever: BM25Retriever,
-                 audit_path: Path | None = None, top_k: int = 4, max_turns: int = 10):
+    def __init__(
+        self,
+        policy: AccessPolicy,
+        retriever: BM25Retriever,
+        audit_path: Path | None = None,
+        top_k: int = 4,
+        max_turns: int = 10,
+    ):
         self.policy = policy
         self.retriever = retriever
         self.memory = ConversationStore(max_turns)
         self.top_k = top_k
         self.audit_path = audit_path
         self._audit_lock = threading.Lock()
-        self.answerer = ExtractiveAnswerer(retriever.idf, {c.id: c.name for c in policy.companies.values()})
+
+        company_names = {c.id: c.name for c in policy.companies.values()}
+        self.answerer = ExtractiveAnswerer(retriever.idf, company_names)
 
     @classmethod
     def from_config(cls) -> "QAService":
         policy = AccessPolicy.load(config.ACCESS_FILE)
         chunks = load_corpus(config.PDF_DIR, policy, config.CHUNK_WORDS, config.OVERLAP_SENTENCES)
         log.info("Indexed %d chunks from %d documents", len(chunks), len({c.document for c in chunks}))
-        return cls(policy, BM25Retriever(chunks), config.LOG_DIR / "audit.jsonl",
-                   config.TOP_K, config.MAX_HISTORY_TURNS)
 
-    # ------------------------------------------------------------------
+        return cls(
+            policy,
+            BM25Retriever(chunks),
+            audit_path=config.LOG_DIR / "audit.jsonl",
+            top_k=config.TOP_K,
+            max_turns=config.MAX_HISTORY_TURNS,
+        )
+
+    # ---------------------------------------------------------------- main entry point
+
     def ask(self, user: User, conversation_id: str, question: str) -> dict:
         question = question.strip()
-        allowed = user.companies                                         # step 1
-        history = self.memory.history(user.email, conversation_id)
-        r = resolve(question, history, self.policy)                      # step 2
 
-        denied = [c for c in r.companies if c not in allowed]            # step 3
-        focus = [c for c in r.companies if c in allowed]
-        search_scope_list: list[str] = []
+        # Steps 1-2: permissions and follow-up rewriting
+        allowed = user.companies
+        history = self.memory.history(user.email, conversation_id)
+        resolved = resolve(question, history, self.policy)
+
+        # Step 3: split the companies the question names into allowed and denied
+        denied = [c for c in resolved.companies if c not in allowed]
+        focus = [c for c in resolved.companies if c in allowed]
+
         if denied and not focus:
+            # Only restricted companies were named: refuse without searching.
+            hits: list[Hit] = []
+            searched: list[str] = []
             answer = self._denied_message(denied, allowed)
-            hits = []
         else:
-            search_scope = frozenset(focus) if focus else allowed
-            hits = self.retriever.search(r.search_query, search_scope, self.top_k)   # step 4
-            # Defence in depth: re-check every hit against the policy before it leaves the service.
-            hits = [h for h in hits if self.policy.can_read(user.email, h.chunk.document)]
-            answer = self.answerer.answer(question, r.search_query, hits, history)  # step 5
+            # Steps 4-5: search the named companies, or all allowed ones if none were named
+            searched = sorted(focus or allowed)
+            hits = self._search(user, resolved.search_query, frozenset(searched))
+            answer = self.answerer.answer(question, resolved.search_query, hits, history)
             if denied:
                 answer = self._denied_message(denied, allowed) + "\n\n" + answer
-            search_scope_list = sorted(search_scope)
 
-        sources = [{
-            "n": n, "company": self.policy.company_name(h.chunk.company_id), "document": h.chunk.document,
-            "title": h.chunk.title, "page": h.chunk.page, "score": round(h.score, 2), "excerpt": h.chunk.text,
-        } for n, h in enumerate(hits, start=1)]
+        # Step 6: remember the turn and audit it
+        sources = self._sources(hits)
+        self.memory.append(user.email, conversation_id, Turn(
+            question=question,
+            standalone_query=resolved.standalone_query,
+            companies=focus,
+            topic=resolved.topic,
+            period=resolved.period,
+            answer=answer,
+            sources=sources,
+        ))
 
-        self.memory.append(user.email, conversation_id, Turn(                     # step 6
-            question, r.standalone_query, focus,
-            r.topic, r.period, answer, sources))
         result = {
             "conversation_id": conversation_id,
             "question": question,
             "answer": answer,
             "sources": sources,
-            "trace": {
-                "standalone_query": r.standalone_query,
-                "is_followup": r.is_followup,
-                "slots": {"companies": [self.policy.company_name(c) for c in r.companies],
-                          "topic": r.topic, "period": r.period},
-                "searched_companies": [self.policy.company_name(c) for c in search_scope_list],
-                "denied_companies": [self.policy.company_name(c) for c in denied],
-            },
+            "trace": self._trace(resolved, searched, denied),
         }
         self._audit(user, result)
         return result
 
+    def library_for(self, user: User) -> list[dict]:
+        return [
+            {"company": self.policy.company_name(cid), "documents": list(self.policy.companies[cid].documents)}
+            for cid in sorted(user.companies)
+        ]
+
+    # ---------------------------------------------------------------- helpers
+
+    def _search(self, user: User, query: str, scope: frozenset[str]) -> list[Hit]:
+        hits = self.retriever.search(query, scope, self.top_k)
+        # Re-check every hit against the access rules before it leaves the service.
+        return [h for h in hits if self.policy.can_read(user.email, h.chunk.document)]
+
+    def _sources(self, hits: list[Hit]) -> list[dict]:
+        return [
+            {
+                "n": n,
+                "company": self.policy.company_name(h.chunk.company_id),
+                "document": h.chunk.document,
+                "title": h.chunk.title,
+                "page": h.chunk.page,
+                "score": round(h.score, 2),
+                "excerpt": h.chunk.text,
+            }
+            for n, h in enumerate(hits, start=1)
+        ]
+
+    def _trace(self, resolved: Resolved, searched: list[str], denied: list[str]) -> dict:
+        names = self.policy.company_name
+        return {
+            "standalone_query": resolved.standalone_query,
+            "is_followup": resolved.is_followup,
+            "slots": {
+                "companies": [names(c) for c in resolved.companies],
+                "topic": resolved.topic,
+                "period": resolved.period,
+            },
+            "searched_companies": [names(c) for c in searched],
+            "denied_companies": [names(c) for c in denied],
+        }
+
     def _denied_message(self, denied: list[str], allowed) -> str:
         names = ", ".join(self.policy.company_name(c) for c in denied)
         mine = ", ".join(sorted(self.policy.company_name(c) for c in allowed)) or "no companies"
-        return (f"Access denied: you are not authorised to view documents for {names}. "
-                f"Your access covers: {mine}.")
+        return f"Access denied: you are not authorised to view documents for {names}. Your access covers: {mine}."
 
     def _audit(self, user: User, result: dict) -> None:
         if not self.audit_path:
             return
+
+        trace = result["trace"]
         line = json.dumps({
             "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "user": user.email,
             "conversation_id": result["conversation_id"],
             "question": result["question"],
-            "standalone_query": result["trace"]["standalone_query"],
-            "searched": result["trace"]["searched_companies"],
-            "denied": result["trace"]["denied_companies"],
+            "standalone_query": trace["standalone_query"],
+            "searched": trace["searched_companies"],
+            "denied": trace["denied_companies"],
             "documents_returned": sorted({s["document"] for s in result["sources"]}),
         })
+
         with self._audit_lock:
             self.audit_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.audit_path, "a") as f:
                 f.write(line + "\n")
-
-    # ------------------------------------------------------------------
-    def library_for(self, user: User) -> list[dict]:
-        return [{"company": self.policy.company_name(cid),
-                 "documents": list(self.policy.companies[cid].documents)}
-                for cid in sorted(user.companies)]

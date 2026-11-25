@@ -1,19 +1,17 @@
-"""FastAPI app: JSON API + the single-page web UI.
+"""FastAPI app: JSON API and the web UI.
 
-Run:  python -m uvicorn app.main:app --reload     then open http://127.0.0.1:8000
+Run:  python -m uvicorn app.main:app --reload   (then open http://127.0.0.1:8000)
 
-FastAPI runs the plain `def` endpoints below in a thread pool, so many users
-can query at the same time. Shared state is either read-only after start-up
-(the index, the policy) or protected by a lock (sessions, conversations,
-audit log).
+Endpoints are plain `def` functions, so FastAPI runs them in a thread pool and
+several users can be served at the same time.
 """
 from __future__ import annotations
 
 import logging
 
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.responses import FileResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -24,12 +22,16 @@ from .service import QAService
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
+STATIC_DIR = config.ROOT / "app" / "static"
+
 service = QAService.from_config()
 sessions = SessionManager(service.policy)
-app = FastAPI(title="Multi-User Document Q&A", version="1.0.0")
-STATIC = config.ROOT / "app" / "static"
-app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
+app = FastAPI(title="Multi-User Document Q&A", version="1.0.0")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+# ---------------------------------------------------------------- request models
 
 class LoginIn(BaseModel):
     email: str = Field(..., examples=["alice@email.com"])
@@ -40,8 +42,10 @@ class ChatIn(BaseModel):
     conversation_id: str | None = None
 
 
-# HTTPBearer reads "Authorization: Bearer <token>" and adds an "Authorize" button to /docs.
-# auto_error=False so a missing token gives our own 401 instead of FastAPI's 403.
+# ---------------------------------------------------------------- authentication
+
+# Reads "Authorization: Bearer <token>" and adds the Authorize button to /docs.
+# auto_error=False so a missing token returns 401 instead of FastAPI's default 403.
 bearer = HTTPBearer(auto_error=False, description="Paste the token returned by POST /api/login")
 
 
@@ -56,9 +60,11 @@ def current_user(token: str | None = Depends(token_from)) -> User:
     return user
 
 
+# ---------------------------------------------------------------- public endpoints
+
 @app.get("/", include_in_schema=False)
 def index():
-    return FileResponse(STATIC / "index.html")
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/api/health")
@@ -68,10 +74,15 @@ def health():
 
 @app.get("/api/demo-users")
 def demo_users():
-    """Lists the dummy accounts so the login screen can offer them. Demo only."""
-    return [{"email": u.email, "name": u.name,
-             "companies": sorted(service.policy.company_name(c) for c in u.companies)}
-            for u in service.policy.users.values()]
+    """Demo accounts shown on the login screen."""
+    return [
+        {
+            "email": user.email,
+            "name": user.name,
+            "companies": sorted(service.policy.company_name(c) for c in user.companies),
+        }
+        for user in service.policy.users.values()
+    ]
 
 
 @app.post("/api/login")
@@ -79,10 +90,17 @@ def login(body: LoginIn):
     result = sessions.login(body.email)
     if not result:
         raise HTTPException(403, "Unknown user. Use one of the demo emails.")
-    token, user = result
-    return {"token": token, "user": {"email": user.email, "name": user.name},
-            "library": service.library_for(user), "conversation_id": service.memory.new(user.email)}
 
+    token, user = result
+    return {
+        "token": token,
+        "user": {"email": user.email, "name": user.name},
+        "library": service.library_for(user),
+        "conversation_id": service.memory.new(user.email),
+    }
+
+
+# ---------------------------------------------------------------- authenticated endpoints
 
 @app.post("/api/logout")
 def logout(token: str | None = Depends(token_from), user: User = Depends(current_user)):
@@ -102,9 +120,10 @@ def new_conversation(user: User = Depends(current_user)):
 
 @app.get("/api/conversations/{cid}")
 def get_conversation(cid: str, user: User = Depends(current_user)):
+    # Another user's conversation id is indistinguishable from one that doesn't exist.
     if not service.memory.exists(user.email, cid):
-        raise HTTPException(404, "Conversation not found")  # also what another user's id looks like
-    return [t.__dict__ for t in service.memory.history(user.email, cid)]
+        raise HTTPException(404, "Conversation not found")
+    return [turn.__dict__ for turn in service.memory.history(user.email, cid)]
 
 
 @app.post("/api/chat")

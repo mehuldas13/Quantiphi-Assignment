@@ -1,15 +1,12 @@
 # Multi-User Document Search and Q&A
 
-A Python web app for searching earnings-call PDFs. Several users share one document set, but each user only gets answers from the companies they have access to. Follow-up questions keep the context of the conversation.
+A Python web app for searching earnings-call PDFs. Each user only gets answers from the companies they have access to, and follow-up questions keep the conversation's context.
 
 ![Alice asks a question and a follow-up](docs/screenshots/02_alice_followup.png)
 
-- **Backend:** Python, FastAPI
-- **UI:** plain HTML/JS page served by the same app
-- **Search:** BM25 keyword search, filtered by the user's access
-- **Answers:** the most relevant sentences from the PDFs, with page references
+Stack: Python, FastAPI, BM25 search, plain HTML/JS UI.
 
-See also: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/REVIEWER_WALKTHROUGH.md](docs/REVIEWER_WALKTHROUGH.md).
+More: [Architecture](docs/ARCHITECTURE.md) · [Reviewer walkthrough](docs/REVIEWER_WALKTHROUGH.md)
 
 ## Setup
 
@@ -24,7 +21,7 @@ run.bat         # Windows
 
 Open **http://127.0.0.1:8000** and keep the terminal running.
 
-Manual setup:
+Or manually:
 
 ```bash
 python3 -m venv .venv
@@ -44,7 +41,7 @@ python -m uvicorn app.main:app --reload
 
 ## Demo users and documents
 
-Six PDFs from five companies are in `data/pdfs/`. The companies and figures are fictional, so the PDFs can be included in a public repo.
+`data/pdfs/` has six transcripts from five fictional companies.
 
 | User | Email | Access |
 |---|---|---|
@@ -55,17 +52,16 @@ Six PDFs from five companies are in `data/pdfs/`. The companies and figures are 
 | User B | `userB@email.com` | Voltara Motors |
 | User C | `userC@email.com` | Zentrix Cloud, Voltara Motors |
 
-Voltara Motors has Q3 and Q4 transcripts; the others have Q4. Access rules are in [`data/access_control.json`](data/access_control.json).
+Access rules: [`data/access_control.json`](data/access_control.json).
 
 ## Using the app
 
-1. Pick a user on the login screen. The left panel shows the documents that user can access.
-2. Ask a question, e.g. "What was the revenue reported in Q4?".
-3. Ask a follow-up, e.g. "And the gross margin?".
-4. Expand **Sources** to see the excerpts used, and **How this answer was built** to see the rewritten query and which companies were searched.
-5. Ask about a company the user can't access to see the access-denied response.
+1. Pick a user. The left panel lists their documents.
+2. Ask "What was the revenue reported in Q4?", then "And the gross margin?".
+3. Expand **Sources** and **How this answer was built** under an answer.
+4. Ask about a company the user can't access to see the access-denied response.
 
-Each browser tab has its own session, so you can sign in as different users in different tabs.
+Each browser tab is a separate session, so you can use two users side by side.
 
 | Access denied | Follow-up questions |
 |---|---|
@@ -113,23 +109,18 @@ docs/
 pytest -q
 ```
 
-The tests check that users only get results from their own companies, that follow-ups keep context, and that parallel users don't affect each other.
-
-With the app running, `python scripts/concurrency_demo.py` sends questions from six users in parallel and reports any leaks.
+Covers access isolation, follow-up context and parallel users. With the app running, `python scripts/concurrency_demo.py` runs six users in parallel and reports any leaks.
 
 ## API (Swagger)
 
-Swagger is at **http://127.0.0.1:8000/docs**.
+Open **http://127.0.0.1:8000/docs**.
 
 1. Call `POST /api/login` with `{"email": "alice@email.com"}` and copy the `token` and `conversation_id`.
 2. Click **Authorize** and paste the token (without `Bearer`).
 3. Call `POST /api/chat` with `{"question": "What was the revenue reported in Q4?", "conversation_id": "..."}`.
 
-Screenshots are in the [reviewer walkthrough](docs/REVIEWER_WALKTHROUGH.md#7-api-in-swagger).
+Screenshots: [reviewer walkthrough](docs/REVIEWER_WALKTHROUGH.md#7-api-in-swagger).
 
 ## Adding PDFs
 
-1. Copy the PDF into `data/pdfs/`.
-2. Add it under a company in `data/access_control.json` (or add a new company with its name and aliases).
-3. Add the company to the users who should see it.
-4. Restart the app.
+Copy the PDF into `data/pdfs/`, list it under a company in `data/access_control.json`, give that company to the right users, and restart.

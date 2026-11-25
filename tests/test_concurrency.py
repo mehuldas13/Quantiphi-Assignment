@@ -1,8 +1,9 @@
-"""Many users at once: answers and conversations do not bleed between users."""
+"""Several users querying at the same time must not affect each other."""
 from concurrent.futures import ThreadPoolExecutor
 
 from conftest import login
 
+# Expected access per user (company display names).
 USERS = {
     "alice@email.com": {"Zentrix Cloud"},
     "bob@email.com": {"Voltara Motors", "Medivane Therapeutics"},
@@ -11,25 +12,43 @@ USERS = {
     "userB@email.com": {"Voltara Motors"},
     "userC@email.com": {"Zentrix Cloud", "Voltara Motors"},
 }
-QUESTIONS = ["What was the revenue reported in Q4?", "And the gross margin?", "What about free cash flow?",
-             "What guidance did they give for 2026?", "What are the risks?"]
+
+QUESTIONS = [
+    "What was the revenue reported in Q4?",
+    "And the gross margin?",
+    "What about free cash flow?",
+    "What guidance did they give for 2026?",
+    "What are the risks?",
+]
+
+SESSIONS_PER_USER = 3
 
 
-def session(client, email):
+def run_session(client, email):
+    """Log in, ask every question in one conversation, then read the conversation back."""
     headers, cid = login(client, email)
-    seen = []
-    for q in QUESTIONS:
-        r = client.post("/api/chat", json={"question": q, "conversation_id": cid}, headers=headers).json()
-        seen.append({s["company"] for s in r["sources"]})
+
+    companies_per_answer = []
+    for question in QUESTIONS:
+        response = client.post("/api/chat", json={"question": question, "conversation_id": cid}, headers=headers)
+        companies_per_answer.append({s["company"] for s in response.json()["sources"]})
+
     history = client.get(f"/api/conversations/{cid}", headers=headers).json()
-    return email, seen, history
+    return email, companies_per_answer, history
 
 
-def test_parallel_users_are_isolated(client):
-    jobs = [email for email in USERS for _ in range(3)]  # 18 sessions, 90 questions, all in parallel
-    with ThreadPoolExecutor(max_workers=18) as pool:
-        results = list(pool.map(lambda e: session(client, e), jobs))
-    for email, seen, history in results:
-        for companies in seen:
+def run_all_sessions_in_parallel(client):
+    emails = [email for email in USERS for _ in range(SESSIONS_PER_USER)]
+    with ThreadPoolExecutor(max_workers=len(emails)) as pool:
+        return list(pool.map(lambda email: run_session(client, email), emails))
+
+
+def test_parallel_answers_stay_within_each_users_access(client):
+    for email, companies_per_answer, _ in run_all_sessions_in_parallel(client):
+        for companies in companies_per_answer:
             assert companies <= USERS[email], email
-        assert [t["question"] for t in history] == QUESTIONS   # each conversation has exactly its own turns
+
+
+def test_parallel_conversations_contain_only_their_own_turns(client):
+    for email, _, history in run_all_sessions_in_parallel(client):
+        assert [turn["question"] for turn in history] == QUESTIONS, email

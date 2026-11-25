@@ -17,36 +17,36 @@ flowchart LR
 
 | Module | Purpose |
 |---|---|
-| `access.py` | Loads `access_control.json`: which companies each user can see, and which documents belong to each company |
-| `auth.py` | Login with an email, returns a random token. Every request identifies the user from this token |
-| `ingest.py` | Reads the PDFs and splits them into ~90-word chunks tagged with company and page |
-| `retriever.py` | BM25 search over the chunks of the user's companies only |
-| `contextualizer.py` | Turns a follow-up into a full query using the previous turn |
-| `memory.py` | Conversation history, stored per user and conversation |
-| `answer.py` | Picks the most relevant sentences from the retrieved chunks |
-| `service.py` | Runs the steps below for each question |
+| `access.py` | Loads `access_control.json`: user → companies → documents |
+| `auth.py` | Email login, issues a random token; requests are identified by token |
+| `ingest.py` | Splits PDFs into ~90-word chunks tagged with company and page |
+| `retriever.py` | BM25 search restricted to the user's companies |
+| `contextualizer.py` | Rewrites follow-ups into full queries |
+| `memory.py` | Conversation history per user and conversation |
+| `answer.py` | Selects the best-matching sentences |
+| `service.py` | Runs the pipeline below |
 
 ## Handling a question
 
-1. Get the user from the token and look up their companies.
-2. If it's a follow-up, fill in the missing company, topic or period from the previous turn.
-3. If the question names a company the user can't access, return an access-denied message for it.
-4. Search only the chunks belonging to the user's companies.
-5. Build the answer from the top chunks and return it with its sources.
-6. Save the turn to the user's conversation and write a line to `logs/audit.jsonl`.
+1. Token → user → allowed companies.
+2. Follow-up? Fill missing company/topic/period from the previous turn.
+3. Named company not allowed → access-denied message.
+4. BM25 search over the allowed companies' chunks.
+5. Answer from the top chunks, with sources.
+6. Save the turn; append to `logs/audit.jsonl`.
 
 ## Access control
 
-- The user always comes from the login token, never from the request body.
-- The search only looks at chunks from the user's companies, so other documents can't appear in results.
-- Each result is checked against the access rules again before it's returned.
-- Conversations are stored under the user's email, so one user can't read or continue another's conversation.
-- PDF downloads (`/api/documents/{name}`) check access too.
+- User identity comes only from the token.
+- Search is pre-filtered to the user's companies.
+- Results are re-checked against the access rules before returning.
+- Conversations are keyed by (user, conversation id).
+- `/api/documents/{name}` checks access.
 - Only PDFs listed in `access_control.json` are indexed.
 
 ## Follow-up questions
 
-Each turn records three values: **company**, **topic** and **period**. When a question is a follow-up (for example it starts with "and" or "what about", uses "that" or "it", or has no company), the missing values are taken from the previous turn.
+Each turn stores **company**, **topic** and **period**. A follow-up (starts with "and"/"what about", uses "that"/"it", or names no company) inherits missing values from the previous turn.
 
 | Question | Company | Topic | Period |
 |---|---|---|---|
@@ -55,14 +55,14 @@ Each turn records three values: **company**, **topic** and **period**. When a qu
 | What drove the improvement? | Voltara *(kept)* | drove improvement | Q3 *(kept)* |
 | What about Medivane? | Medivane | drove improvement *(kept)* | Q3 *(kept)* |
 
-The company is used as a search filter. The topic and period are the search terms. The UI shows the resulting query under "How this answer was built".
+Company is the search filter; topic and period are the search terms.
 
 ## Search and answers
 
-- **Chunking:** sentences are grouped into ~90-word chunks with one sentence of overlap. An analyst's question is kept in the same chunk as the answer to it.
-- **Search:** BM25 with simple stemming and a short list of finance synonyms (Q4 → fourth quarter, revenue ↔ sales).
-- **Answer:** the sentences that best match the query terms, preferring ones with numbers. When a matching sentence is an analyst's question, the next sentence (the answer) is used. Up to three sentences are returned, each with its company and source number.
+- **Chunking:** ~90 words, one-sentence overlap; an analyst question stays with its answer.
+- **Search:** BM25 with light stemming and finance synonyms (Q4 → fourth quarter, revenue ↔ sales).
+- **Answer:** up to three best-matching sentences, numbers preferred; a matched analyst question is replaced by the answer that follows it.
 
 ## Concurrency
 
-FastAPI runs requests in a thread pool. The search index and access rules are read-only after start-up. Sessions, conversations and the audit log are each protected by a lock. `tests/test_concurrency.py` runs 18 sessions in parallel and checks that results and conversations stay separate.
+Requests run in FastAPI's thread pool. The index and access rules are read-only after start-up; sessions, conversations and the audit log each have a lock. `tests/test_concurrency.py` checks parallel sessions stay separate.

@@ -76,11 +76,9 @@ In a second terminal:
 
 ```bash
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pytest -q
-# 108 passed
+pytest -q                               # all tests should pass
 
-python scripts/concurrency_demo.py      # needs the app running
-# 6 users x 3 questions in parallel, ... leaks: 0
+python scripts/concurrency_demo.py      # needs the app running; should report leaks: 0
 ```
 
 ## 7. API in Swagger
