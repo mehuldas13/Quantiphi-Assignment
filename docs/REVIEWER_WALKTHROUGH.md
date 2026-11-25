@@ -141,28 +141,3 @@ The dialog now shows **Authorized**. Click **Close**. Swagger will send the toke
 * To switch user, click **Authorize → Logout**, log in again with another email (step 2) and authorize with the new token.
 
 If you get **401 Not logged in**, the token is missing or expired: repeat steps 2 and 3.
-
-## 8. Optional: Claude-written answers
-
-Stop the app, set `ANTHROPIC_API_KEY`, and start it again. Answers are then written by Claude from the same access-filtered excerpts. "How this answer was built" shows `Answer mode: claude`.
-
----
-
-## Questions a reviewer may ask
-
-**Why not a vector database?**
-Earnings-call questions use the documents' own vocabulary, so BM25 is accurate, needs no downloads and is deterministic. The retriever has a one-method interface, so a vector or hybrid store can replace it; the access filter becomes a metadata filter.
-
-**Could the LLM leak data from other users?**
-No. The model only receives excerpts retrieved under the user's filter and that user's own history. It never sees the corpus.
-
-**What if a user guesses another user's conversation id?**
-Conversations are keyed by the authenticated user plus the id. Another user gets a 404 on read and a fresh conversation on write. Covered by `test_conversations_are_private`.
-
-**How does it handle many users?**
-FastAPI serves requests on a thread pool. The index is read-only, and the three pieces of shared mutable state (sessions, conversations, audit log) each have a lock. For multiple servers, sessions and conversations would move to Redis.
-
-**Why are the companies fictional?**
-So the repository can be public with the PDFs included. Real investor-relations PDFs can be added by copying them into `data/pdfs/` and listing them in `access_control.json` (README section 9).
-
-More detail on the design: [ARCHITECTURE.md](ARCHITECTURE.md).
