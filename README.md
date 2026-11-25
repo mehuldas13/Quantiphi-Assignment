@@ -75,6 +75,24 @@ python -m uvicorn app.main:app --reload   # http://127.0.0.1:8000
 
 The interactive API docs (Swagger) are at **http://127.0.0.1:8000/docs**.
 
+### Trying the API in Swagger (/docs)
+
+1. Open **http://127.0.0.1:8000/docs**.
+2. Expand `POST /api/login` → **Try it out** → body `{"email": "alice@email.com"}` → **Execute**. Copy the `token` and `conversation_id` from the response.
+3. Click the **Authorize** button (padlock, top right), paste **only the token** (without the word `Bearer`), click **Authorize**, then **Close**.
+4. Expand `POST /api/chat` → **Try it out** → body `{"question": "What was the revenue reported in Q4?", "conversation_id": "<id from step 2>"}` → **Execute**.
+
+Every protected endpoint now sends the token. To act as another user, click **Authorize** → **Logout**, log in as that user and authorize with the new token.
+
+From the command line:
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8000/api/login -H "Content-Type: application/json" \
+  -d '{"email":"alice@email.com"}' | python -c "import sys,json; print(json.load(sys.stdin)['token'])")
+curl -s -X POST http://127.0.0.1:8000/api/chat -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"question":"What was the revenue reported in Q4?"}'
+```
+
 ### Optional: Claude-written answers
 
 By default answers are **extractive**: the app quotes the most relevant sentences from the PDFs, with citations. To have Claude write a fluent answer from the same retrieved excerpts:

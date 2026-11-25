@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -39,8 +40,16 @@ class ChatIn(BaseModel):
     conversation_id: str | None = None
 
 
-def current_user(authorization: str | None = Header(default=None)) -> User:
-    token = authorization.removeprefix("Bearer ").strip() if authorization else None
+# HTTPBearer reads "Authorization: Bearer <token>" and adds an "Authorize" button to /docs.
+# auto_error=False so a missing token gives our own 401 instead of FastAPI's 403.
+bearer = HTTPBearer(auto_error=False, description="Paste the token returned by POST /api/login")
+
+
+def token_from(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> str | None:
+    return creds.credentials.strip() if creds else None
+
+
+def current_user(token: str | None = Depends(token_from)) -> User:
     user = sessions.user_for(token)
     if not user:
         raise HTTPException(401, "Not logged in or session expired")
@@ -76,8 +85,8 @@ def login(body: LoginIn):
 
 
 @app.post("/api/logout")
-def logout(authorization: str | None = Header(default=None), user: User = Depends(current_user)):
-    sessions.logout(authorization.removeprefix("Bearer ").strip())
+def logout(token: str | None = Depends(token_from), user: User = Depends(current_user)):
+    sessions.logout(token)
     return {"ok": True}
 
 

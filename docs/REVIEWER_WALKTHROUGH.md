@@ -18,7 +18,7 @@ Keep the terminal open and go to **http://127.0.0.1:8000**. If it doesn't start,
 Open the app in **two browser tabs**. Each tab has its own session, so you can sign in as two users at the same time.
 
 Optional extras:
-* Swagger API docs: http://127.0.0.1:8000/docs
+* Swagger API docs: http://127.0.0.1:8000/docs (log in with `POST /api/login`, then paste the token into the **Authorize** button; see the [README](../README.md#trying-the-api-in-swagger-docs))
 * Audit log: `logs/audit.jsonl` (created after the first question)
 
 ## 1. The setup
